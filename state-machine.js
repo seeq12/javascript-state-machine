@@ -13,7 +13,7 @@
 
     //---------------------------------------------------------------------------
 
-    VERSION: "2.3.5",
+    VERSION: "2.3.6",
 
     //---------------------------------------------------------------------------
 
@@ -38,8 +38,9 @@
     create: function(cfg, target) {
 
       var initial      = (typeof cfg.initial == 'string') ? { state: cfg.initial } : cfg.initial; // allow for a simple string, or an object with { state: 'foo', event: 'setup', defer: true|false }
-      var terminal     = cfg.terminal || cfg['final'];
+      var terminal     = cfg.terminal || cfg.final;
       var fsm          = target || cfg.target  || {};
+      var sameStateTransitions = cfg.sameStateTransitions;
       var events       = cfg.events || [];
       var callbacks    = cfg.callbacks || {};
       var map          = {}; // track state transitions allowed for an event { event: { from: [ to ] } }
@@ -61,29 +62,33 @@
         add({ name: initial.event, from: 'none', to: initial.state });
       }
 
-      for(var n = 0 ; n < events.length ; n++)
+      for(var n = 0 ; n < events.length ; n++) {
         add(events[n]);
-
-      for(var name in map) {
-        if (map.hasOwnProperty(name))
-          fsm[name] = StateMachine.buildEvent(name, map[name]);
       }
 
-      for(var name in callbacks) {
-        if (callbacks.hasOwnProperty(name))
-          fsm[name] = callbacks[name]
+      for(var name in map) {
+        if (map.hasOwnProperty(name)) {
+          fsm[name] = StateMachine.buildEvent(name, map[name]);
+        }
+      }
+
+      for(var callback in callbacks) {
+        if (callbacks.hasOwnProperty(callback)) {
+          fsm[callback] = callbacks[callback];
+        }
       }
 
       fsm.current     = 'none';
       fsm.is          = function(state) { return (state instanceof Array) ? (state.indexOf(this.current) >= 0) : (this.current === state); };
-      fsm.can         = function(event) { return !this.transition && (map[event].hasOwnProperty(this.current) || map[event].hasOwnProperty(StateMachine.WILDCARD)); }
+      fsm.can         = function(event) { return !this.transition && (map[event].hasOwnProperty(this.current) || map[event].hasOwnProperty(StateMachine.WILDCARD)); };
       fsm.cannot      = function(event) { return !this.can(event); };
       fsm.transitions = function()      { return transitions[this.current]; };
       fsm.isFinished  = function()      { return this.is(terminal); };
       fsm.error       = cfg.error || function(name, from, to, args, error, msg, e) { throw e || msg; }; // default behavior when something unexpected happens is to throw an exception, but caller can override this behavior if desired (see github issue #3 and #17)
 
-      if (initial && !initial.defer)
+      if (initial && !initial.defer) {
         fsm[initial.event]();
+      }
 
       return fsm;
 
@@ -143,26 +148,29 @@
     buildEvent: function(name, map) {
       return function() {
 
+        var fsm = this;
         var from  = this.current;
         var to    = map[from] || map[StateMachine.WILDCARD] || from;
         var args  = Array.prototype.slice.call(arguments); // turn arguments into pure array
 
-        if (this.transition)
+        if (this.transition) {
           return this.error(name, from, to, args, StateMachine.Error.PENDING_TRANSITION, "event " + name + " inappropriate because previous transition did not complete");
+        }
 
-        if (this.cannot(name))
+        if (this.cannot(name)) {
           return this.error(name, from, to, args, StateMachine.Error.INVALID_TRANSITION, "event " + name + " inappropriate in current state " + this.current);
+        }
 
-        if (false === StateMachine.beforeEvent(this, name, from, to, args))
+        if (false === StateMachine.beforeEvent(this, name, from, to, args)) {
           return StateMachine.Result.CANCELLED;
+        }
 
-        if (from === to) {
+        if (from === to && !this.sameStateTransitions) {
           StateMachine.afterEvent(this, name, from, to, args);
           return StateMachine.Result.NOTRANSITION;
         }
 
         // prepare a transition method for use EITHER lower down, or by caller if they want an async transition (indicated by an ASYNC return value from leaveState)
-        var fsm = this;
         this.transition = function() {
           fsm.transition = null; // this method should only ever be called once
           fsm.current = to;
@@ -174,7 +182,7 @@
         this.transition.cancel = function() { // provide a way for caller to cancel async transition if desired (issue #22)
           fsm.transition = null;
           StateMachine.afterEvent(fsm, name, from, to, args);
-        }
+        };
 
         var leave = StateMachine.leaveState(this, name, from, to, args);
         if (false === leave) {

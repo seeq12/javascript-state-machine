@@ -1,4 +1,4 @@
-Javascript Finite State Machine (v2.3.5)
+Javascript Finite State Machine (v2.3.6)
 ========================================
 
 This standalone javascript micro-framework provides a finite state machine for your pleasure.
@@ -176,6 +176,18 @@ You can affect the event in 3 ways:
  * return `false` from an `onleaveSTATE` handler to cancel the event.
  * return `ASYNC` from an `onleaveSTATE` handler to perform an asynchronous state transition (see next section)
 
+By default, state entry/exit events are not called if an event transition ends up in the same state in which it
+started. Set `sameStateTransitions` to true to override this behavior.
+
+    var fsm = StateMachine.create({
+      initial: 'dry',
+      events: [
+        { name: 'rain', from: ['dry', 'wet'], to: 'wet' },
+        { name: 'sun',  from: ['dry', 'wet'], to: 'dry' }
+      ],
+      sameStateTransitions: true
+    });
+
 Asynchronous State Transitions
 ==============================
 
@@ -259,7 +271,7 @@ instances:
 
 This should be easy to adjust to fit your appropriate mechanism for object construction.
 
->> _NOTE: the `startup` event can be given any name, but it must be present in some form to 
+>> _NOTE: the `startup` event can be given any name, but it must be present in some form to
    ensure that each instance constructed is initialized with its own unique `current` state._
 
 Initialization Options
@@ -360,8 +372,3 @@ Contact
 If you have any ideas, feedback, requests or bug reports, you can reach me at
 [jake@codeincomplete.com](mailto:jake@codeincomplete.com), or via
 my website: [Code inComplete](http://codeincomplete.com/)
-
-
-
-
-
